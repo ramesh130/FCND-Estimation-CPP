@@ -70,15 +70,31 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-  cmd.desiredThrustsN[0] = mass * 9.81f / 4.f; // front left
-  cmd.desiredThrustsN[1] = mass * 9.81f / 4.f; // front right
-  cmd.desiredThrustsN[2] = mass * 9.81f / 4.f; // rear left
-  cmd.desiredThrustsN[3] = mass * 9.81f / 4.f; // rear right
+  /*
+  float l = L / sqrt(2);
 
+  float A = collThrustCmd;
+  float B = momentCmd.x / l;
+  float C = momentCmd.y / l;
+  float D = -momentCmd.z / kappa;
+
+  float Thr1 = (A + B + C + D) / 4.0;
+  float Thr2 = (A - B + C - D) / 4.0;
+  float Thr3 = (A + B - C - D) / 4.0;
+  float Thr4 = (A - B - C + D) / 4.0;
+
+  // Helpful tip from slack to add Constrain with min and max thrust - May 25th
+  cmd.desiredThrustsN[0] = CONSTRAIN(Thr1, minMotorThrust, maxMotorThrust); // front left
+  cmd.desiredThrustsN[1] = CONSTRAIN(Thr2, minMotorThrust, maxMotorThrust); // front right
+  cmd.desiredThrustsN[2] = CONSTRAIN(Thr3, minMotorThrust, maxMotorThrust); // rear left
+  cmd.desiredThrustsN[3] = CONSTRAIN(Thr4, minMotorThrust, maxMotorThrust); // rear right
+  */
+  
   /////////////////////////////// END STUDENT CODE ////////////////////////////
   
   /////////////////////////////// BEGIN SOLUTION //////////////////////////////
   // Convert desired moment into differential thrusts
+  
   V3F diffThrust;
 
   // for X shaped quad
@@ -116,15 +132,26 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
   V3F momentCmd;
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
   
+  /*
+  //kpPQR - Angle Rate Gains
+  float u_bar_p = kpPQR.x * (pqrCmd.x - pqr.x) * Ixx;
+  float u_bar_q = kpPQR.y * (pqrCmd.y - pqr.y) * Iyy;
+  float u_bar_r = kpPQR.z * (pqrCmd.z - pqr.z) * Izz;
 
+  momentCmd.x = u_bar_p;
+  momentCmd.y = u_bar_q;
+  momentCmd.z = u_bar_r;
+  */
+  
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   /////////////////////////////// BEGIN SOLUTION //////////////////////////////
+  
   V3F rate_error = pqrCmd - pqr;
   V3F omega_dot_des = rate_error * kpPQR;
   momentCmd = omega_dot_des * V3F(Ixx, Iyy, Izz);
+
   //////////////////////////////// END SOLUTION ///////////////////////////////
 
   return momentCmd;
@@ -153,14 +180,42 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
   Mat3x3F R = attitude.RotationMatrix_IwrtB();
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+  
+  /*
+  // formual from Lesson 14 - Exercise 4.2
+  float b_x = R(0, 2);
+  float b_y = R(1, 2);
+  float R11 = R(0, 0);
+  float R12 = R(0, 1);
+  float R21 = R(1, 0);
+  float R22 = R(1, 1);
+  float R33 = R(2, 2);
 
+  float c = -(collThrustCmd / mass);
+  float b_x_c = accelCmd.x / c;
+  float b_y_c = accelCmd.y / c;
 
+  float b_x_err = b_x_c - b_x;
+  float b_y_err = b_y_c - b_y;
+
+  float b_x_p_term = kpBank * b_x_err;
+  float b_y_p_term = kpBank * b_y_err;
+
+  float b_x_commanded_dot = b_x_p_term;
+  float b_y_commanded_dot = b_y_p_term;
+
+  float p_c = (R21 * b_x_commanded_dot - R11 * b_y_commanded_dot) / R33;
+  float q_c = (R22 * b_x_commanded_dot - R12 * b_y_commanded_dot) / R33;
+
+  pqrCmd.x = p_c;
+  pqrCmd.y = q_c;
+  pqrCmd.z = 0.0;
+  */
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   /////////////////////////////// BEGIN SOLUTION //////////////////////////////
 
-  
   float target_R13 = -CONSTRAIN(accelCmd[0] / (collThrustCmd / mass), -maxTiltAngle, maxTiltAngle);
   float target_R23 = -CONSTRAIN(accelCmd[1] / (collThrustCmd / mass), -maxTiltAngle, maxTiltAngle);
     
@@ -201,7 +256,25 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
+  /*
+  float z_err = posZCmd - posZ;
+  float z_err_dot = velZCmd - velZ;
 
+  float b_z = R(2, 2);
+
+  float p_term = kpPosZ * z_err;
+  float d_term = kpVelZ * z_err_dot;
+
+  // Help from thread - May 9th
+  integratedAltitudeError += z_err * dt;
+  // there is supposed to be an i_term, which is kiPosZ
+  float i_term = KiPosZ * integratedAltitudeError;
+  float u_1_bar = p_term + d_term + accelZCmd + i_term;
+  float c = (u_1_bar - CONST_GRAVITY)/b_z;
+
+  // May 23rd - adding -mass helps to lift the drone
+  thrust = c * -mass;
+  */
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -216,7 +289,7 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
   float desAccel = kpVelZ * (velZCmd - velZ) + KiPosZ * integratedAltitudeError + accelZCmd - 9.81f;
 
   thrust = -(desAccel / R(2, 2) * mass);
-
+  
   //////////////////////////////// END SOLUTION ///////////////////////////////
   
   return thrust;
@@ -253,7 +326,27 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-  
+  /*
+  float x_err = posCmd.x - pos.x;
+  float y_err = posCmd.y - pos.y;
+
+  float p_term_x = kpPosXY * x_err;
+  float p_term_y = kpPosXY * y_err;
+
+  // limit the max and min of velocity and acceleration
+  velCmd.x = CONSTRAIN(p_term_x, -maxSpeedXY, maxSpeedXY);
+  velCmd.y = CONSTRAIN(p_term_y, -maxSpeedXY, maxSpeedXY);
+
+  float x_err_dot = velCmd.x - vel.x;
+  float y_err_dot = velCmd.y - vel.y;
+
+  float d_term_x = kpVelXY * x_err_dot;
+  float d_term_y = kpVelXY * y_err_dot;
+
+  // limit the max and min of velocity and acceleration
+  accelCmd.x = CONSTRAIN(d_term_x, -maxAccelXY, maxAccelXY);
+  accelCmd.y = CONSTRAIN(d_term_y, -maxAccelXY, maxAccelXY);
+  */
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -293,6 +386,10 @@ float QuadControl::YawControl(float yawCmd, float yaw)
   float yawRateCmd=0;
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
+  /*
+  float p_err = yawCmd - yaw;
+  yawRateCmd = kpYaw * p_err;
+  */
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
